@@ -65,7 +65,7 @@ jobs:
           persist-credentials: false
       - name: Verify USB protocol on loopback
         working-directory: upstream
-        run: CC=clang bash tools/test_usb_device.sh
+        run: CC='clang -D_DEFAULT_SOURCE' bash tools/test_usb_device.sh
       - name: Compile ESP32-S3 USB NCM firmware
         run: |
           docker run --rm \
