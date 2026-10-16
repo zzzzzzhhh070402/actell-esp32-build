@@ -1,0 +1,82 @@
+name: Build Actell for iPhone and ESP32
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: Artifacts to build
+        type: choice
+        required: true
+        default: all
+        options:
+          - all
+          - ios
+          - firmware
+
+permissions:
+  contents: read
+
+concurrency:
+  group: actell-build-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  ios:
+    if: inputs.target == 'all' || inputs.target == 'ios'
+    runs-on: xcode-27
+    timeout-minutes: 35
+    steps:
+      - name: Check out build helpers
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Check out fixed public upstream source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: ja1chen/actell
+          ref: 55234856b8cb6fc114c0ca2674cd7bd420b1654c
+          path: upstream
+          persist-credentials: false
+      - name: Compile and package unsigned IPA
+        run: bash ci/build-ios.sh upstream artifacts/ios
+      - name: Upload unsigned IPA and exact source
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: Actell-iOS27-unsigned
+          path: artifacts/ios/
+          if-no-files-found: error
+          retention-days: 7
+
+  firmware:
+    if: inputs.target == 'all' || inputs.target == 'firmware'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: Check out build helpers
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Check out fixed public upstream source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: ja1chen/actell
+          ref: 55234856b8cb6fc114c0ca2674cd7bd420b1654c
+          path: upstream
+          persist-credentials: false
+      - name: Verify USB protocol on loopback
+        working-directory: upstream
+        run: CC=clang bash tools/test_usb_device.sh
+      - name: Compile ESP32-S3 USB NCM firmware
+        run: |
+          docker run --rm \
+            -v "$GITHUB_WORKSPACE:/workspace" \
+            -w /workspace \
+            espressif/idf:v5.5.5@sha256:a9231d0697ab8f7517cc072e93b7c83e04907bfbfba80b6440d7dbbf90665cf2 \
+            bash ci/build-firmware.sh upstream artifacts/firmware
+      - name: Upload firmware and exact source
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: Actell-ESP32S3-NCM
+          path: artifacts/firmware/
+          if-no-files-found: error
+          retention-days: 7
